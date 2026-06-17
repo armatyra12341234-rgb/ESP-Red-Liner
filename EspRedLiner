@@ -16,6 +16,7 @@ if queue_on_tp then
     local autoExecCode = [[
         -- loadstring(game:HttpGet("https://raw.githubusercontent.com/armatyra12341234-rgb/ESP-Red-Liner/refs/heads/main/EspRedLiner"))()
     ]]
+    --test
     
     -- Ставим код в очередь (сработает при ручном реджойне или кике)
     queue_on_tp(autoExecCode)
