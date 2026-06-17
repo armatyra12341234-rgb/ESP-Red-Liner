@@ -14,7 +14,7 @@ if queue_on_tp then
     -- ВАЖНО: Чтобы скрипт сам запускался на новом сервере, залей его на GitHub (Raw) или Pastebin.
     -- Раскомментируй строку ниже и вставь свою прямую ссылку на код.
     local autoExecCode = [[
-        -- loadstring(game:HttpGet("ТВОЯ_ССЫЛКА_НА_RAW_СКРИПТ_ЗДЕСЬ"))()
+        -- loadstring(game:HttpGet("https://raw.githubusercontent.com/armatyra12341234-rgb/ESP-Red-Liner/refs/heads/main/EspRedLiner"))()
     ]]
     
     -- Ставим код в очередь (сработает при ручном реджойне или кике)
