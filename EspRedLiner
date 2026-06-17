@@ -14,7 +14,8 @@ if queue_on_tp then
     -- ВАЖНО: Чтобы скрипт сам запускался на новом сервере, залей его на GitHub (Raw) или Pastebin.
     -- Раскомментируй строку ниже и вставь свою прямую ссылку на код.
     local autoExecCode = [[
-        -- loadstring(game:HttpGet("https://raw.githubusercontent.com/armatyra12341234-rgb/ESP-Red-Liner/refs/heads/main/EspRedLiner"))()
+        task.wait(2)
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/armatyra12341234-rgb/ESP-Red-Liner/refs/heads/main/EspRedLiner"))()
     ]]
     --test
     
@@ -576,8 +577,13 @@ task.spawn(function()
     LoadFrame:Destroy()
     MainFrame.Visible = true 
     Settings.Enabled = true 
-    MainTab:GetChildren()[1].Text = "Enable ESP: true"
-    MainTab:GetChildren()[1].BackgroundColor3 = Color3.fromRGB(50, 0, 10)
+    for _, child in ipairs(MainTab:GetChildren()) do
+		if child:IsA("TextButton") and child.Text:match("Enable ESP") then
+			child.Text = "Enable ESP: true"
+			child.BackgroundColor3 = Color3.fromRGB(50, 0, 10)
+			break
+		end
+	end
 end)
 
 -- ==========================================
