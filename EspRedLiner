@@ -1,0 +1,724 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- ==========================================
+-- СОХРАНЕНИЕ ПРИ REJOIN И ТЕЛЕПОРТАХ
+-- ==========================================
+local queue_on_tp = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
+if queue_on_tp then
+    -- ВАЖНО: Чтобы скрипт сам запускался на новом сервере, залей его на GitHub (Raw) или Pastebin.
+    -- Раскомментируй строку ниже и вставь свою прямую ссылку на код.
+    local autoExecCode = [[
+        -- loadstring(game:HttpGet("ТВОЯ_ССЫЛКА_НА_RAW_СКРИПТ_ЗДЕСЬ"))()
+    ]]
+    
+    -- Ставим код в очередь (сработает при ручном реджойне или кике)
+    queue_on_tp(autoExecCode)
+    
+    -- Подхватываем телепорты, инициированные самой игрой
+    LocalPlayer.OnTeleport:Connect(function(State)
+        if State == Enum.TeleportState.InProgress then
+            queue_on_tp(autoExecCode)
+        end
+    end)
+end
+
+-- ==========================================
+-- НАСТРОЙКИ
+-- ==========================================
+local Settings = {
+    Enabled = false,
+    TargetHP = 60,
+    TargetHPColor = Color3.fromRGB(255, 20, 40),
+    NormalColor = Color3.fromRGB(255, 255, 255),
+    UseSkeleton = false,
+    UseBox = false,
+    UseTracers = false,
+    ShowCross = false,
+    ShowText = false,
+    TextColor = Color3.fromRGB(255, 255, 255),
+    ToggleKey = Enum.KeyCode.RightControl,
+    
+    Targets = {
+        {Name = "", Color = Color3.fromRGB(255, 255, 0), TracerColor = Color3.fromRGB(255, 255, 0)},
+        {Name = "", Color = Color3.fromRGB(255, 0, 255), TracerColor = Color3.fromRGB(255, 0, 255)},
+        {Name = "", Color = Color3.fromRGB(0, 255, 255), TracerColor = Color3.fromRGB(0, 255, 255)},
+    }
+}
+
+local IsBindingKey = false
+
+-- ==========================================
+-- ИНИЦИАЛИЗАЦИЯ ИНТЕРФЕЙСА
+-- ==========================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "CyberESP_V9"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true 
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local DrawLayer = Instance.new("ScreenGui")
+DrawLayer.Name = "ESP_DrawLayer"
+DrawLayer.ResetOnSpawn = false
+DrawLayer.IgnoreGuiInset = true 
+DrawLayer.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- ==========================================
+-- ЭКРАН ЗАГРУЗКИ
+-- ==========================================
+local LoadFrame = Instance.new("Frame", ScreenGui)
+LoadFrame.Size = UDim2.new(1, 0, 1, 0)
+LoadFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+LoadFrame.ZIndex = 100
+
+local LoadText = Instance.new("TextLabel", LoadFrame)
+LoadText.Size = UDim2.new(1, 0, 0, 50)
+LoadText.Position = UDim2.new(0, 0, 0.5, -60)
+LoadText.BackgroundTransparency = 1
+LoadText.Text = "SYSTEM BOOTING..."
+LoadText.TextColor3 = Color3.fromRGB(255, 20, 40)
+LoadText.Font = Enum.Font.Code
+LoadText.TextSize = 20
+
+local BarBg = Instance.new("Frame", LoadFrame)
+BarBg.Size = UDim2.new(0, 400, 0, 4)
+BarBg.Position = UDim2.new(0.5, -200, 0.5, 0)
+BarBg.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+BarBg.BorderSizePixel = 0
+
+local BarFill = Instance.new("Frame", BarBg)
+BarFill.Size = UDim2.new(0, 0, 1, 0)
+BarFill.BackgroundColor3 = Color3.fromRGB(255, 20, 40)
+BarFill.BorderSizePixel = 0
+BarFill.ZIndex = 101
+
+-- ==========================================
+-- ГЛАВНОЕ МЕНЮ
+-- ==========================================
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 450, 0, 420)
+MainFrame.Position = UDim2.new(0.5, -225, 0.5, -210)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainFrame.BorderSizePixel = 2
+MainFrame.BorderColor3 = Color3.fromRGB(255, 20, 40)
+MainFrame.Active = true
+MainFrame.Visible = false 
+
+local TitleBar = Instance.new("TextLabel", MainFrame)
+TitleBar.Size = UDim2.new(1, 0, 0, 25)
+TitleBar.BackgroundColor3 = Color3.fromRGB(20, 0, 5)
+TitleBar.BorderColor3 = Color3.fromRGB(255, 20, 40)
+TitleBar.Text = " NEON CORP // ESP_HUD_V9"
+TitleBar.TextColor3 = Color3.fromRGB(255, 20, 40)
+TitleBar.Font = Enum.Font.Code
+TitleBar.TextSize = 14
+TitleBar.TextXAlignment = Enum.TextXAlignment.Left
+
+local function MakeDraggable(frame)
+    local dragStart, startPos, dragging
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+MakeDraggable(MainFrame)
+
+local TabButtons = Instance.new("Frame", MainFrame)
+TabButtons.Size = UDim2.new(0, 120, 1, -25)
+TabButtons.Position = UDim2.new(0, 0, 0, 25)
+TabButtons.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+TabButtons.BorderSizePixel = 0
+
+local Container = Instance.new("Frame", MainFrame)
+Container.Size = UDim2.new(1, -130, 1, -35)
+Container.Position = UDim2.new(0, 125, 0, 30)
+Container.BackgroundTransparency = 1
+
+local function CreateTab(name, order)
+    local b = Instance.new("TextButton", TabButtons)
+    b.Size = UDim2.new(1, -10, 0, 35)
+    b.Position = UDim2.new(0, 5, 0, 5 + (order * 40))
+    b.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    b.Text = name
+    b.TextColor3 = Color3.fromRGB(200, 200, 200)
+    b.Font = Enum.Font.RobotoMono
+    b.TextSize = 14
+    b.BorderSizePixel = 1
+    b.BorderColor3 = Color3.fromRGB(50, 50, 50)
+    
+    local p = Instance.new("ScrollingFrame", Container)
+    p.Size = UDim2.new(1, 0, 1, 0)
+    p.BackgroundTransparency = 1
+    p.Visible = (order == 0)
+    p.CanvasSize = UDim2.new(0, 0, 1.8, 0)
+    p.ScrollBarThickness = 4
+    p.ScrollBarImageColor3 = Color3.fromRGB(255, 20, 40)
+    
+    local list = Instance.new("UIListLayout", p)
+    list.Padding = UDim.new(0, 8)
+    
+    b.MouseButton1Click:Connect(function()
+        for _, v in pairs(Container:GetChildren()) do v.Visible = false end
+        for _, v in pairs(TabButtons:GetChildren()) do if v:IsA("TextButton") then v.BorderColor3 = Color3.fromRGB(50, 50, 50) end end
+        p.Visible = true
+        b.BorderColor3 = Color3.fromRGB(255, 20, 40)
+    end)
+    return p
+end
+
+local MainTab = CreateTab("Main", 0)
+local TargetTab = CreateTab("Targets", 1)
+local ConfigTab = CreateTab("Settings", 2)
+
+-- ==========================================
+-- НОВЫЙ COLOR PICKER
+-- ==========================================
+local ColorPickerFrame = Instance.new("Frame", ScreenGui)
+ColorPickerFrame.Size = UDim2.new(0, 220, 0, 240)
+ColorPickerFrame.Position = UDim2.new(0.5, 230, 0.5, -125)
+ColorPickerFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+ColorPickerFrame.BorderColor3 = Color3.fromRGB(255, 20, 40)
+ColorPickerFrame.Visible = false
+ColorPickerFrame.Active = true
+MakeDraggable(ColorPickerFrame)
+
+local CPF_Title = Instance.new("TextLabel", ColorPickerFrame)
+CPF_Title.Size = UDim2.new(1, 0, 0, 20)
+CPF_Title.BackgroundColor3 = Color3.fromRGB(30, 0, 0)
+CPF_Title.Text = " Select Color"
+CPF_Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+CPF_Title.Font = Enum.Font.RobotoMono
+CPF_Title.TextXAlignment = Enum.TextXAlignment.Left
+
+local PaletteGrid = Instance.new("Frame", ColorPickerFrame)
+PaletteGrid.Size = UDim2.new(1, -20, 0, 110)
+PaletteGrid.Position = UDim2.new(0, 10, 0, 30)
+PaletteGrid.BackgroundTransparency = 1
+
+local GridLayout = Instance.new("UIGridLayout", PaletteGrid)
+GridLayout.CellSize = UDim2.new(0, 30, 0, 30)
+GridLayout.CellPadding = UDim2.new(0, 4, 0, 4)
+
+local BaseColors = {
+    Color3.fromRGB(255, 0, 0), Color3.fromRGB(255, 128, 0), Color3.fromRGB(255, 255, 0),
+    Color3.fromRGB(0, 255, 0), Color3.fromRGB(0, 255, 255), Color3.fromRGB(0, 0, 255),
+    Color3.fromRGB(128, 0, 255), Color3.fromRGB(255, 0, 255), Color3.fromRGB(255, 255, 255),
+    Color3.fromRGB(150, 150, 150), Color3.fromRGB(75, 75, 75), Color3.fromRGB(255, 20, 40)
+}
+
+local CurrentBaseH, CurrentBaseS, CurrentBaseV = 0, 1, 1
+local CurrentColorTarget = nil
+local CurrentColorRef = nil
+local CurrentBtnRef = nil
+
+local ApplyBtn = Instance.new("TextButton", ColorPickerFrame)
+ApplyBtn.Size = UDim2.new(1, -20, 0, 30)
+ApplyBtn.Position = UDim2.new(0, 10, 1, -35)
+ApplyBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+ApplyBtn.Text = "Close"
+ApplyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ApplyBtn.Font = Enum.Font.RobotoMono
+
+local ShadeBg = Instance.new("Frame", ColorPickerFrame)
+ShadeBg.Size = UDim2.new(1, -20, 0, 15)
+ShadeBg.Position = UDim2.new(0, 10, 0, 160)
+ShadeBg.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ShadeBg.BorderSizePixel = 1
+ShadeBg.BorderColor3 = Color3.fromRGB(50, 50, 50)
+
+local ShadeUIGradient = Instance.new("UIGradient", ShadeBg)
+ShadeUIGradient.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.new(0, 0, 0)),
+    ColorSequenceKeypoint.new(1, Color3.new(1, 0, 0))
+}
+
+local ShadeKnob = Instance.new("Frame", ShadeBg)
+ShadeKnob.Size = UDim2.new(0, 6, 1, 4)
+ShadeKnob.Position = UDim2.new(1, -3, 0, -2)
+ShadeKnob.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+ShadeKnob.BorderSizePixel = 1
+
+local function UpdateColorOutput()
+    local finalColor = Color3.fromHSV(CurrentBaseH, CurrentBaseS, CurrentBaseV)
+    if CurrentColorTarget and CurrentColorRef then
+        CurrentColorTarget[CurrentColorRef] = finalColor
+        if CurrentBtnRef then CurrentBtnRef.BackgroundColor3 = finalColor end
+        ApplyBtn.BackgroundColor3 = finalColor
+    end
+end
+
+for _, color in ipairs(BaseColors) do
+    local cBtn = Instance.new("TextButton", PaletteGrid)
+    cBtn.BackgroundColor3 = color
+    cBtn.Text = ""
+    cBtn.BorderSizePixel = 1
+    cBtn.BorderColor3 = Color3.fromRGB(30, 30, 30)
+    cBtn.MouseButton1Click:Connect(function()
+        CurrentBaseH, CurrentBaseS, _ = color:ToHSV()
+        ShadeUIGradient.Color = ColorSequence.new{
+            ColorSequenceKeypoint.new(0, Color3.new(0, 0, 0)),
+            ColorSequenceKeypoint.new(1, Color3.fromHSV(CurrentBaseH, CurrentBaseS, 1))
+        }
+        UpdateColorOutput()
+    end)
+end
+
+local isDraggingSlider = false
+ShadeBg.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isDraggingSlider = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isDraggingSlider = false
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if isDraggingSlider then
+        local mousePos = UserInputService:GetMouseLocation().X
+        local bgPos = ShadeBg.AbsolutePosition.X
+        local bgSize = ShadeBg.AbsoluteSize.X
+        local percent = math.clamp((mousePos - bgPos) / bgSize, 0, 1)
+        
+        ShadeKnob.Position = UDim2.new(percent, -3, 0, -2)
+        CurrentBaseV = percent
+        UpdateColorOutput()
+    end
+end)
+
+ApplyBtn.MouseButton1Click:Connect(function() ColorPickerFrame.Visible = false end)
+
+local function AddColorButton(parent, text, targetTable, colorKey)
+    local container = Instance.new("Frame", parent)
+    container.Size = UDim2.new(1, -10, 0, 35)
+    container.BackgroundTransparency = 1
+    
+    local lbl = Instance.new("TextLabel", container)
+    lbl.Size = UDim2.new(0.7, 0, 1, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = text
+    lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
+    lbl.Font = Enum.Font.RobotoMono
+    lbl.TextSize = 14
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local btn = Instance.new("TextButton", container)
+    btn.Size = UDim2.new(0.3, 0, 0.8, 0)
+    btn.Position = UDim2.new(0.7, 0, 0.1, 0)
+    btn.BackgroundColor3 = targetTable[colorKey]
+    btn.Text = ""
+    
+    btn.MouseButton1Click:Connect(function()
+        CurrentColorTarget = targetTable
+        CurrentColorRef = colorKey
+        CurrentBtnRef = btn
+        
+        local h, s, v = btn.BackgroundColor3:ToHSV()
+        CurrentBaseH, CurrentBaseS, CurrentBaseV = h, s, v
+        ShadeUIGradient.Color = ColorSequence.new{
+            ColorSequenceKeypoint.new(0, Color3.new(0, 0, 0)),
+            ColorSequenceKeypoint.new(1, Color3.fromHSV(h, s, 1))
+        }
+        ShadeKnob.Position = UDim2.new(v, -3, 0, -2)
+        ColorPickerFrame.Visible = true
+    end)
+end
+
+-- ==========================================
+-- КОНТЕНТ МЕНЮ
+-- ==========================================
+local function AddToggle(parent, text, key)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = UDim2.new(1, -10, 0, 35)
+    btn.BackgroundColor3 = Settings[key] and Color3.fromRGB(50, 0, 10) or Color3.fromRGB(25, 25, 25)
+    btn.Text = text .. ": " .. tostring(Settings[key])
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.RobotoMono
+    btn.TextSize = 14
+    btn.MouseButton1Click:Connect(function()
+        Settings[key] = not Settings[key]
+        btn.Text = text .. ": " .. tostring(Settings[key])
+        btn.BackgroundColor3 = Settings[key] and Color3.fromRGB(50, 0, 10) or Color3.fromRGB(25, 25, 25)
+    end)
+end
+
+AddToggle(MainTab, "Enable ESP", "Enabled")
+AddToggle(MainTab, "Show Name/HP", "ShowText")
+AddToggle(MainTab, "Skeleton", "UseSkeleton")
+AddToggle(MainTab, "Box", "UseBox")
+AddToggle(MainTab, "Tracers", "UseTracers")
+AddToggle(MainTab, "Low HP Cross", "ShowCross")
+
+AddColorButton(MainTab, "Text Color", Settings, "TextColor")
+AddColorButton(MainTab, "Normal Color", Settings, "NormalColor")
+AddColorButton(MainTab, "Target HP Color", Settings, "TargetHPColor")
+
+local HPContainer = Instance.new("Frame", MainTab)
+HPContainer.Size = UDim2.new(1, -10, 0, 50)
+HPContainer.BackgroundTransparency = 1
+
+local HPLbl = Instance.new("TextLabel", HPContainer)
+HPLbl.Size = UDim2.new(1, 0, 0, 20)
+HPLbl.BackgroundTransparency = 1
+HPLbl.Text = "Target HP Trigger: " .. Settings.TargetHP
+HPLbl.TextColor3 = Color3.fromRGB(200, 200, 200)
+HPLbl.Font = Enum.Font.RobotoMono
+
+local HPInput = Instance.new("TextBox", HPContainer)
+HPInput.Size = UDim2.new(1, 0, 0, 25)
+HPInput.Position = UDim2.new(0, 0, 0, 25)
+HPInput.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+HPInput.Text = tostring(Settings.TargetHP)
+HPInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+HPInput.Font = Enum.Font.RobotoMono
+
+HPInput.FocusLost:Connect(function()
+    local val = tonumber(HPInput.Text)
+    if val then Settings.TargetHP = math.clamp(val, 1, 150) HPLbl.Text = "Target HP Trigger: " .. Settings.TargetHP end
+    HPInput.Text = tostring(Settings.TargetHP)
+end)
+
+for i = 1, 3 do
+    local f = Instance.new("Frame", TargetTab)
+    f.Size = UDim2.new(1, -10, 0, 100)
+    f.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    f.BorderSizePixel = 1
+    f.BorderColor3 = Color3.fromRGB(50, 50, 50)
+    
+    local input = Instance.new("TextBox", f)
+    input.Size = UDim2.new(1, -10, 0, 30)
+    input.Position = UDim2.new(0, 5, 0, 5)
+    input.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    input.Text = ""
+    input.PlaceholderText = "Target " .. i .. " Name..."
+    input.TextColor3 = Color3.fromRGB(255, 255, 255)
+    
+    AddColorButton(f, "Box/Skel Color", Settings.Targets[i], "Color")
+    f:GetChildren()[2].Position = UDim2.new(0, 5, 0, 40)
+    
+    AddColorButton(f, "Tracer Color", Settings.Targets[i], "TracerColor")
+    f:GetChildren()[3].Position = UDim2.new(0, 5, 0, 70)
+    
+    input:GetPropertyChangedSignal("Text"):Connect(function()
+        local text = input.Text:lower()
+        if text ~= "" then
+            for _, p in pairs(Players:GetPlayers()) do
+                if p.Name:lower():sub(1, #text) == text then
+                    Settings.Targets[i].Name = p.Name
+                    break
+                end
+            end
+        else Settings.Targets[i].Name = "" end
+    end)
+end
+
+local BindKeyBtn = Instance.new("TextButton", ConfigTab)
+BindKeyBtn.Size = UDim2.new(1, -10, 0, 40)
+BindKeyBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+BindKeyBtn.BorderSizePixel = 1
+BindKeyBtn.BorderColor3 = Color3.fromRGB(255, 20, 40)
+BindKeyBtn.Text = "Menu Key: " .. Settings.ToggleKey.Name
+BindKeyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+BindKeyBtn.Font = Enum.Font.RobotoMono
+BindKeyBtn.TextSize = 14
+
+BindKeyBtn.MouseButton1Click:Connect(function()
+    IsBindingKey = true
+    BindKeyBtn.Text = "Press any key..."
+    BindKeyBtn.BackgroundColor3 = Color3.fromRGB(60, 10, 15)
+end)
+
+local UnloadBtn = Instance.new("TextButton", ConfigTab)
+UnloadBtn.Size = UDim2.new(1, -10, 0, 40)
+UnloadBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+UnloadBtn.Text = "UNLOAD SCRIPT"
+UnloadBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+UnloadBtn.Font = Enum.Font.Code
+
+-- ==========================================
+-- КЭШИРОВАНИЕ И ОТРИСОВКА
+-- ==========================================
+local Cache = {}
+local RenderConnection
+local InputConnection
+
+local function CreateLine()
+    local l = Instance.new("Frame", DrawLayer)
+    l.BorderSizePixel = 0
+    l.Visible = false
+    return l
+end
+
+local function GetDraws(player)
+    if not Cache[player] then
+        local bFrame = Instance.new("Frame", DrawLayer)
+        bFrame.BackgroundTransparency = 1
+        bFrame.Visible = false
+        local stroke = Instance.new("UIStroke", bFrame)
+        stroke.Thickness = 1
+        
+        local ti = Instance.new("TextLabel", DrawLayer)
+        ti.BackgroundTransparency = 1
+        ti.Font = Enum.Font.RobotoMono
+        ti.TextSize = 13
+        ti.TextStrokeTransparency = 0
+        ti.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        ti.Size = UDim2.new(0, 200, 0, 40)
+        ti.Visible = false
+        
+        Cache[player] = {
+            Tracer = CreateLine(),
+            BoxFrame = bFrame,
+            BoxStroke = stroke,
+            Skel = {},
+            Cross = {CreateLine(), CreateLine()},
+            TextInfo = ti
+        }
+        for i=1, 12 do table.insert(Cache[player].Skel, CreateLine()) end
+    end
+    return Cache[player]
+end
+
+local function RenderLine(frame, p1, p2, color, thickness)
+    local dist = (p1 - p2).Magnitude
+    if dist < 1 then frame.Visible = false return end
+    frame.Size = UDim2.new(0, dist, 0, thickness)
+    frame.Position = UDim2.new(0, (p1.X + p2.X) / 2, 0, (p1.Y + p2.Y) / 2)
+    frame.Rotation = math.deg(math.atan2(p2.Y - p1.Y, p2.X - p1.X))
+    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    frame.BackgroundColor3 = color
+    frame.Visible = true
+end
+
+local function DrawStrictSkeleton(Camera, char, espSkel, color, rigType)
+    local joints = rigType == Enum.HumanoidRigType.R15 and {
+        {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
+        {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"},
+        {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"},
+        {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"},
+        {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}
+    } or {
+        {"Head", "Torso"}, {"Torso", "Left Arm"}, {"Torso", "Right Arm"},
+        {"Torso", "Left Leg"}, {"Torso", "Right Leg"}
+    }
+    
+    local idx = 1
+    for _, bone in ipairs(joints) do
+        local part1 = char:FindFirstChild(bone[1])
+        local part2 = char:FindFirstChild(bone[2])
+        if part1 and part2 then
+            local p1 = Camera:WorldToViewportPoint(part1.Position)
+            local p2 = Camera:WorldToViewportPoint(part2.Position)
+            if p1.Z > 0 and p2.Z > 0 then
+                RenderLine(espSkel[idx], Vector2.new(p1.X, p1.Y), Vector2.new(p2.X, p2.Y), color, 1)
+                idx = idx + 1
+            end
+        end
+    end
+    for i = idx, #espSkel do espSkel[i].Visible = false end
+end
+
+-- ==========================================
+-- ЛОГИКА ЗАГРУЗКИ
+-- ==========================================
+task.spawn(function()
+    local playersList = Players:GetPlayers()
+    local total = #playersList
+    
+    if total > 1 then
+        for i, player in ipairs(playersList) do
+            if player ~= LocalPlayer then
+                LoadText.Text = "CACHING ENTITY: " .. player.Name
+                GetDraws(player) 
+                BarFill:TweenSize(UDim2.new(i/total, 0, 1, 0), "Out", "Sine", 0.1, true)
+                task.wait(0.05) 
+            end
+        end
+    else
+        BarFill:TweenSize(UDim2.new(1, 0, 1, 0), "Out", "Sine", 0.2, true)
+        task.wait(0.2)
+    end
+
+    LoadText.Text = "SYSTEM READY."
+    LoadText.TextColor3 = Color3.fromRGB(20, 255, 100)
+    BarFill.BackgroundColor3 = Color3.fromRGB(20, 255, 100)
+    
+    task.wait(0.5)
+    
+    TweenService:Create(LoadFrame, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+    TweenService:Create(LoadText, TweenInfo.new(0.5), {TextTransparency = 1}):Play()
+    TweenService:Create(BarBg, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+    TweenService:Create(BarFill, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+    
+    task.wait(0.5)
+    LoadFrame:Destroy()
+    MainFrame.Visible = true 
+    Settings.Enabled = true 
+    MainTab:GetChildren()[1].Text = "Enable ESP: true"
+    MainTab:GetChildren()[1].BackgroundColor3 = Color3.fromRGB(50, 0, 10)
+end)
+
+-- ==========================================
+-- ИДЕАЛЬНЫЙ РЕНДЕР (СТАТИЧНЫЙ БОКС ПО КОРЕШКУ)
+-- ==========================================
+RenderConnection = RunService.RenderStepped:Connect(function()
+    local Camera = Workspace.CurrentCamera 
+    
+    if not Settings.Enabled then
+        for _, esp in pairs(Cache) do
+            esp.Tracer.Visible = false esp.BoxFrame.Visible = false esp.TextInfo.Visible = false
+            for _, v in pairs(esp.Skel) do v.Visible = false end
+            for _, v in pairs(esp.Cross) do v.Visible = false end
+        end
+        return
+    end
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+        local esp = GetDraws(player)
+        local char = player.Character
+        local hum = char and char:FindFirstChild("Humanoid")
+        
+        if not char or not hum or hum.Health <= 0 then
+            esp.Tracer.Visible = false esp.BoxFrame.Visible = false esp.TextInfo.Visible = false
+            for _, v in pairs(esp.Skel) do v.Visible = false end
+            for _, v in pairs(esp.Cross) do v.Visible = false end
+            continue
+        end
+
+        local color = Settings.NormalColor
+        local tracerColor = Settings.NormalColor
+        local isTarget = false
+
+        for i = 1, 3 do
+            if Settings.Targets[i].Name ~= "" and player.Name == Settings.Targets[i].Name then
+                color = Settings.Targets[i].Color tracerColor = Settings.Targets[i].TracerColor isTarget = true break
+            end
+        end
+
+        local currentHP = 150
+        local ro = player:FindFirstChild("ReadOnly")
+        if ro and ro:FindFirstChild("health") then currentHP = ro.health.Value end
+
+        if not isTarget and currentHP < Settings.TargetHP then
+            color = Settings.TargetHPColor tracerColor = Settings.TargetHPColor
+        end
+
+        local rootPart = char:FindFirstChild("HumanoidRootPart")
+        local headPart = char:FindFirstChild("Head")
+        
+        if rootPart and headPart then
+            local rootPoint = Camera:WorldToViewportPoint(rootPart.Position)
+
+            -- [!] СТАТИЧНАЯ МАТЕМАТИКА [!] 
+            -- Считаем коробку от центра головы до примерного расположения ступней (игнорируя экипировку)
+            local topPos = headPart.Position + Vector3.new(0, 0.5, 0)
+            local bottomPos = rootPart.Position - Vector3.new(0, 3, 0)
+            
+            local topPoint = Camera:WorldToViewportPoint(topPos)
+            local bottomPoint = Camera:WorldToViewportPoint(bottomPos)
+
+            if rootPoint.Z > 0 and topPoint.Z > 0 and bottomPoint.Z > 0 then
+                
+                -- Высчитываем высоту и фиксированную ширину (1 к 2)
+                local boxHeight = math.abs(bottomPoint.Y - topPoint.Y)
+                local boxWidth = boxHeight * 0.5 
+                
+                local minX = topPoint.X - (boxWidth / 2)
+                local minY = topPoint.Y
+
+                if Settings.UseBox then
+                    esp.BoxFrame.Position = UDim2.new(0, minX, 0, minY)
+                    esp.BoxFrame.Size = UDim2.new(0, boxWidth, 0, boxHeight)
+                    esp.BoxStroke.Color = color
+                    esp.BoxFrame.Visible = true
+                else esp.BoxFrame.Visible = false end
+
+                if Settings.UseTracers then
+                    RenderLine(esp.Tracer, Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y), Vector2.new(rootPoint.X, rootPoint.Y), tracerColor, 1)
+                else esp.Tracer.Visible = false end
+
+                if Settings.ShowText then
+                    esp.TextInfo.Position = UDim2.new(0, minX + (boxWidth/2) - 100, 0, minY - 35)
+                    esp.TextInfo.Text = string.format("%s(%s)\n(%d HP)", player.DisplayName, player.Name, currentHP)
+                    esp.TextInfo.TextColor3 = Settings.TextColor
+                    esp.TextInfo.Visible = true
+                else esp.TextInfo.Visible = false end
+
+                if Settings.ShowCross and not isTarget and currentHP < Settings.TargetHP then
+                    local cx, cy = topPoint.X, minY + (boxHeight/2)
+                    RenderLine(esp.Cross[1], Vector2.new(cx-12, cy-12), Vector2.new(cx+12, cy+12), color, 2)
+                    RenderLine(esp.Cross[2], Vector2.new(cx-12, cy+12), Vector2.new(cx+12, cy-12), color, 2)
+                else esp.Cross[1].Visible = false esp.Cross[2].Visible = false end
+
+                if Settings.UseSkeleton then
+                    DrawStrictSkeleton(Camera, char, esp.Skel, color, hum.RigType)
+                else for _, v in pairs(esp.Skel) do v.Visible = false end end
+
+            else
+                esp.Tracer.Visible = false esp.BoxFrame.Visible = false esp.TextInfo.Visible = false
+                for _, v in pairs(esp.Skel) do v.Visible = false end
+                for _, v in pairs(esp.Cross) do v.Visible = false end
+            end
+        else
+            esp.Tracer.Visible = false esp.BoxFrame.Visible = false esp.TextInfo.Visible = false
+            for _, v in pairs(esp.Skel) do v.Visible = false end
+            for _, v in pairs(esp.Cross) do v.Visible = false end
+        end
+    end
+end)
+
+InputConnection = UserInputService.InputBegan:Connect(function(input, gp)
+    if IsBindingKey then
+        if input.KeyCode ~= Enum.KeyCode.Unknown and input.KeyCode ~= Enum.KeyCode.MouseButton1 then
+            Settings.ToggleKey = input.KeyCode IsBindingKey = false
+            BindKeyBtn.Text = "Menu Key: " .. Settings.ToggleKey.Name
+            BindKeyBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        end
+        return
+    end
+    if not gp and input.KeyCode == Settings.ToggleKey then MainFrame.Visible = not MainFrame.Visible end
+end)
+
+UnloadBtn.MouseButton1Click:Connect(function()
+    if RenderConnection then RenderConnection:Disconnect() end
+    if InputConnection then InputConnection:Disconnect() end
+    ScreenGui:Destroy() DrawLayer:Destroy()
+    ColorPickerFrame:Destroy()
+    for _, esp in pairs(Cache) do
+        esp.Tracer:Destroy() esp.BoxFrame:Destroy() esp.TextInfo:Destroy()
+        for _, v in pairs(esp.Skel) do v:Destroy() end
+        for _, v in pairs(esp.Cross) do v:Destroy() end
+    end
+    Cache = nil script:Destroy()
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    if Cache and Cache[player] then
+        Cache[player].Tracer:Destroy() Cache[player].BoxFrame:Destroy() Cache[player].TextInfo:Destroy()
+        for _, v in pairs(Cache[player].Skel) do v:Destroy() end
+        for _, v in pairs(Cache[player].Cross) do v:Destroy() end
+        Cache[player] = nil
+    end
+end)
