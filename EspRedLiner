@@ -578,12 +578,12 @@ task.spawn(function()
     MainFrame.Visible = true 
     Settings.Enabled = true 
     for _, child in ipairs(MainTab:GetChildren()) do
-		if child:IsA("TextButton") and child.Text:match("Enable ESP") then
-			child.Text = "Enable ESP: true"
-			child.BackgroundColor3 = Color3.fromRGB(50, 0, 10)
-			break
-		end
-	end
+    if child:IsA("TextButton") then
+        child.Text = "Enable ESP: true"
+        child.BackgroundColor3 = Color3.fromRGB(50, 0, 10)
+        break -- Найдем первую кнопку и остановимся
+    end
+end
 end)
 
 -- ==========================================
